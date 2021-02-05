@@ -1,0 +1,235 @@
+#welcome!
+#let's get this party started
+df <- read.csv("world_marathon_majors.csv")
+library(ggplot2)
+library(gganimate)
+
+##quick exploration to see what we're working with...
+head(df)
+str(df)
+
+#first, let's make gender and marathon factors, and check which levels we have
+df$gender <- as.factor(df$gender)
+df$marathon <- as.factor(df$marathon)
+levels(df$gender)
+levels(df$marathon)
+
+#next, let's convert winning times from hh:mm:ss to total seconds to make it more usable
+library(lubridate)
+time_data <- df$time
+temp <- hms(time_data)
+new_times <- as.integer(hour(temp)*3600 + minute(temp)*60 + second(temp))
+df$time <- new_times
+
+#quick check for missing data--making a function since I might want to re-use this in the future...
+check_na <- function(df){
+  isna <- c()
+  for(i in 1:ncol(df)){
+    isna <- c(isna, sum(is.na(df[,i])))
+  }
+isna
+}
+check_na(df)
+
+#big picture overview
+summary(df)
+
+#I might want to plot chronology, but the original dataset doesn't include race month, so let's add that
+month <- c()
+for(i in 1:nrow(df)){
+  if(df$marathon[i]=="Berlin"){
+    month <- c(month, 9.0)
+  } else if(df$marathon[i]=="Boston"){
+    month <- c(month, 4.0)
+  } else if(df$marathon[i]=="Chicago"){
+    month <- c(month, 10.0)
+  } else if(df$marathon[i]=="London"){
+    month <- c(month, 4.5)
+  } else if(df$marathon[i]=="NYC"){
+    month <- c(month, 11.0)
+  }else {
+    month <- c(month, 2.0)
+  }
+}
+df$month <- month
+
+#we definitely want to separate men's results from the women's, so let's create two separate dataframes and re-order them chronologically
+women_only <- df$gender == "Female"
+womens_races <- df[women_only,]
+womens_races <- womens_races[order(womens_races[,1], womens_races[,7]),]
+
+men_only <- df$gender == "Male"
+mens_races <- df[men_only,]
+mens_races <- mens_races[order(mens_races[,1], mens_races[,7]),]
+
+#finally, time for a visual!
+count_m <- mens_races[,c(1,5,6,7)]
+count_f <- womens_races[,c(1,5,6,7)]
+theme_set(theme_bw())
+line_graph <- ggplot(count_m, aes(x=marathon, y=time))
+line_graph + geom_dotplot(method="histodot", binaxis="y", binwidth=100, dotsize=0.75, stackdir="center", color="blue", fill="blue") +
+  geom_dotplot(data=count_f, method="histodot", binaxis="y", binwidth=100, dotsize=0.75, stackdir="center", color="red", fill="red") +
+  labs(title="Major Marathons, 1897-2018",
+       subtitle="Winner finishes for men (blue) and women (red)",
+       x="Marathon Name",
+       y="Finish Time (in seconds)")
+
+#we already knew that we had way more data for Boston, but the historical overlap in male v female times is interesting---let's look at a density chart for another perspective
+density <- df[,c(1,3,5,6,7)]
+theme_set(theme_classic())
+density_graph <- ggplot(density, aes(time))
+density_graph + geom_density(aes(fill=factor(marathon)), alpha=0.8, show.legend=FALSE) +
+  labs(title="Major Marathon Finish Times, 1897-2018",
+       subtitle="Winner Finish Time Density, by race",
+       x="Winner Finish Time",
+       y="Density") +
+  facet_grid(marathon ~ gender)
+
+#men's finish times at Boston span a wide and relatively even range---let's look at them by year, but keep the women's results since it's so little extra work to add them to the plot
+boston_m <- mens_races[mens_races$marathon=="Boston",]
+boston_f <- womens_races[womens_races$marathon=="Boston",]
+boston_line <- ggplot(boston_m, aes(x=year, y=time, color="blue")) +
+  geom_line() + geom_line(data=boston_f, aes(x=year, y=time, color="red")) +
+  transition_reveal(year)
+boston_line
+#wow, the women were killing it in the 70s! :)
+
+#now, suspend disbelief with me, if you will, and imagine that this data meets randomization requirements for standard statistical tests. everyone seems to be getting faster, but the women are doing so at a greater velocity. I wonder if women were as fast in the past 20 years of racing to Boston's Copley Square as their male counterparts were 100 years earlier? two quick visuals first:
+men_boston_1899_1918 <- mens_races[mens_races$marathon=="Boston" & mens_races$year>=1899 & mens_races$year<=1918,]
+women_boston_1999_2018 <- womens_races[womens_races$marathon=="Boston" & womens_races$year>=1999 & womens_races$year<=2018,]
+plot(men_boston_1899_1918$year, men_boston_1899_1918$time,
+  ylim=c(8400,10500),
+  main="Boston Men's Finishes, 1899-1918",
+  xlab="Year",
+  ylab="Finish Time, inseconds")
+plot(women_boston_1999_2018$year, women_boston_1999_2018$time,
+  ylim=c(8400,10500),
+  main="Boston Women's Finishes, 1999-2018",
+  xlab="Year",
+  ylab="Finish Time, in seconds")
+  
+#hmm, hard to tell from those scatterplots...maybe a boxplot will help?
+boston_data <- list(women_boston_1999_2018$time, men_boston_1899_1918$time)
+names(boston_data) <- c(paste("Women's\nFinishes\n1999-2018\nn=", length(women_boston_1999_2018$time), sep=""), paste("Men's\nFinishes\n1899-1918\nn=", length(men_boston_1899_1918$time), sep=""))
+par(mgp=c(3,4,0))
+boxplot(boston_data)
+title("Comparison of Boston Men v. Women\n100 Years Apart")
+
+#it looks like the women of 1999-2018 were faster than the men of 1899-1918, but let's confirm that with an easy test
+wilcox <- wilcox.test(women_boston_1999_2018$time, men_boston_1899_1918$time)
+wilcox$p.value
+#not a terribly useful bit of information that we've established here, but pretty cool nonetheless
+
+#what else can we explore? the kenyans are known for dominating the international marathoning world, right?
+country_info <- as.factor(df$country)
+summary(country_info)
+
+#136 wins in this dataset! let's zoom in on this...
+kenyan_men <- mens_races[mens_races$country=="Kenya" & mens_races$year>=1983,]
+kenyan_women <- womens_races[womens_races$country=="Kenya" & womens_races$year>=1983,]
+kenyan_racers <- rbind(kenyan_men, kenyan_women)
+theme_set(theme_gray())
+kenyan_boxplot <- ggplot(kenyan_racers, aes(x=marathon, y=time, fill=gender))
+kenyan_boxplot + geom_boxplot() +
+  labs(title="Kenyan Major Marathon Wins, 1983-2018",
+       subtitle="Winner Finish Times, by race and gender",
+       x="Marathon Name",
+       y="Winner Finish Time")
+
+#it looks like the men have high variability in finish times across races, but the women are pretty consistent--let's confirm
+n_races_kenyan_men <- length(kenyan_men$year)
+n_races_kenyan_women <- length(kenyan_women$year)
+kruskal_men <- kruskal.test(time~marathon, kenyan_men)
+kruskal_women <- kruskal.test(time~marathon, kenyan_women)
+kruskal_results <- matrix(c(n_races_kenyan_men, kruskal_men$statistic, kruskal_men$parameter, round(kruskal_men$p.value,6), n_races_kenyan_women, kruskal_women$statistic, kruskal_women$parameter, round(kruskal_women$p.value,6)), ncol=4, byrow=TRUE)
+colnames(kruskal_results) <- c("no_of_races", "chi_squared", "df", "p_value")
+rownames(kruskal_results) <- c("kenyan_men", "kenyan_women")
+kruskal_results
+#nope, still plenty of variability in the Kenyan women across these races!
+
+#are you still suspending disbelief with me? great, because it's time for a ridiculous ANOVA! close your eyes while I check some standard assumptions, even though we're ignoring statistical reliability here...
+#checking number of observations per group
+a <- length(kenyan_men$time[kenyan_men$marathon=="Boston"])
+b <- length(kenyan_men$time[kenyan_men$marathon=="NYC"])
+c <- length(kenyan_men$time[kenyan_men$marathon=="Chicago"])
+d <- length(kenyan_men$time[kenyan_men$marathon=="London"])
+e <- length(kenyan_men$time[kenyan_men$marathon=="Berlin"])
+f <- length(kenyan_men$time[kenyan_men$marathon=="Tokyo"])
+g <- length(kenyan_women$time[kenyan_women$marathon=="Boston"])
+h <- length(kenyan_women$time[kenyan_women$marathon=="NYC"])
+i <- length(kenyan_women$time[kenyan_women$marathon=="Chicago"])
+j <- length(kenyan_women$time[kenyan_women$marathon=="London"])
+k <- length(kenyan_women$time[kenyan_women$marathon=="Berlin"])
+l <- length(kenyan_women$time[kenyan_women$marathon=="Tokyo"])
+no_of_observations <- matrix(c(a,b,c,d,e,f,g,h,i,j,k,l), ncol=6, byrow=TRUE)
+colnames(no_of_observations) <- c("Boston", "NYC", "Chicago", "London", "Berlin", "Tokyo")
+rownames(no_of_observations) <- c("kenyan_men", "kenyan_women")
+no_of_observations
+
+#checking normality of response variable per group
+a <- shapiro.test(kenyan_men$time[kenyan_men$marathon=="Boston"])$p.value
+b <- shapiro.test(kenyan_men$time[kenyan_men$marathon=="NYC"])$p.value
+c <- shapiro.test(kenyan_men$time[kenyan_men$marathon=="Chicago"])$p.value
+d <- shapiro.test(kenyan_men$time[kenyan_men$marathon=="London"])$p.value
+e <- shapiro.test(kenyan_men$time[kenyan_men$marathon=="Berlin"])$p.value
+f <- shapiro.test(kenyan_men$time[kenyan_men$marathon=="Tokyo"])$p.value
+g <- shapiro.test(kenyan_women$time[kenyan_women$marathon=="Boston"])$p.value
+h <- shapiro.test(kenyan_women$time[kenyan_women$marathon=="NYC"])$p.value
+i <- shapiro.test(kenyan_women$time[kenyan_women$marathon=="Chicago"])$p.value
+j <- shapiro.test(kenyan_women$time[kenyan_women$marathon=="London"])$p.value
+k <- shapiro.test(kenyan_women$time[kenyan_women$marathon=="Berlin"])$p.value
+l <- 0   #not running shapiro for women's Tokyo since <3 observations and we're really just making stuff up at this point...
+temp <- c(a,b,c,d,e,f,g,h,i,j,k)
+temp <- round(temp, 6)
+temp <- c(temp, l)
+shapiro_p_values <- matrix(c(temp), ncol=6, byrow=TRUE)
+colnames(shapiro_p_values) <- c("Boston", "NYC", "Chicago", "London", "Berlin", "Tokyo")
+rownames(shapiro_p_values) <- c("kenyan_men", "kenyan_women")
+shapiro_p_values
+
+#checking homogeneity of variances per group (avoiding bartlett to avoid restructuring the dataset)
+a <- sd(kenyan_men$time[kenyan_men$marathon=="Boston"])
+b <- sd(kenyan_men$time[kenyan_men$marathon=="NYC"])
+c <- sd(kenyan_men$time[kenyan_men$marathon=="Chicago"])
+d <- sd(kenyan_men$time[kenyan_men$marathon=="London"])
+e <- sd(kenyan_men$time[kenyan_men$marathon=="Berlin"])
+f <- sd(kenyan_men$time[kenyan_men$marathon=="Tokyo"])
+g <- sd(kenyan_women$time[kenyan_women$marathon=="Boston"])
+h <- sd(kenyan_women$time[kenyan_women$marathon=="NYC"])
+i <- sd(kenyan_women$time[kenyan_women$marathon=="Chicago"])
+j <- sd(kenyan_women$time[kenyan_women$marathon=="London"])
+k <- sd(kenyan_women$time[kenyan_women$marathon=="Berlin"])
+l <- sd(kenyan_women$time[kenyan_women$marathon=="Tokyo"])
+sd_per_group <- matrix(c(a,b,c,d,e,f,g,h,i,j,k,l), ncol=6, byrow=TRUE)
+colnames(sd_per_group) <- c("Boston", "NYC", "Chicago", "London", "Berlin", "Tokyo")
+rownames(sd_per_group) <- c("kenyan_men", "kenyan_women")
+sd_per_group
+
+#ok, we're really far out on a precarious limb here and absolutely shouldn't be running any more statistical tests today, but we have to see this crazy ANOVA to its ridiculous conclusion
+summary(aov(time~marathon+gender+marathon:gender, kenyan_racers))
+
+#unsurprisingly, we have main effects for gender and host city, but no interaction effect between those two variables--I mean, if we hadn't thrown basic stats out the window ~114 lines of code ago. Final visual to wrap things up!
+a <- mean(kenyan_men$time[kenyan_men$marathon=="Boston"])
+b <- mean(kenyan_men$time[kenyan_men$marathon=="NYC"])
+c <- mean(kenyan_men$time[kenyan_men$marathon=="Chicago"])
+d <- mean(kenyan_men$time[kenyan_men$marathon=="London"])
+e <- mean(kenyan_men$time[kenyan_men$marathon=="Berlin"])
+f <- mean(kenyan_men$time[kenyan_men$marathon=="Tokyo"])
+g <- mean(kenyan_women$time[kenyan_women$marathon=="Boston"])
+h <- mean(kenyan_women$time[kenyan_women$marathon=="NYC"])
+i <- mean(kenyan_women$time[kenyan_women$marathon=="Chicago"])
+j <- mean(kenyan_women$time[kenyan_women$marathon=="London"])
+k <- mean(kenyan_women$time[kenyan_women$marathon=="Berlin"])
+l <- mean(kenyan_women$time[kenyan_women$marathon=="Tokyo"])
+marathon_names <- c("Boston", "NYC", "Chicago", "London", "Berlin", "Tokyo")
+mens_times <- c(a,b,c,d,e,f)
+womens_times <- c(g,h,i,j,k,l)
+kenyan_avg <- data.frame(marathon_names, mens_times, womens_times)
+colnames(kenyan_avg) <- c("marathon", "mean_finish_men", "mean_finish_women")
+kenyan_dot <- ggplot(kenyan_avg, aes(x=marathon, y=mean_finish_men))
+kenyan_dot + geom_point(color="#00BFC4") + geom_point(data=kenyan_avg, aes(x=marathon, y=mean_finish_women), color="#F8766D") +
+  labs(title="Kenyan Marathon Wins, 1983-2018",
+       subtitle="Average Finish Times, by race and gender",
+       x="Marathon Name",
+       y="Mean Finish Time, in seconds") +
+theme(legend.position="none")
