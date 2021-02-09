@@ -10,12 +10,12 @@ This repository is a "discipline endeavor" for me to:
 * create an interactive space where I can learn and improve  
 
 ### About this repository  
-This repository contains some lighthearted statistical and dataviz tomfoolery based on major world marathon win times for six races across the US, Europe, and Japan, spanning 1897-2018.  
+This repository contains some lighthearted statistical and dataviz tomfoolery based on major world marathon win times for six races across the US, Europe, and Japan, spanning 1897-2018.
 
 ### How to contribute/interact  
 I love learning new things, so please post an issue to point out any error in my code or to offer constructive suggestions!  
 
 ### Plans for this repository  
 - [x] add simple R code without markdown
-- [ ] add a pretty, knitted R-markdown file and its .rmd
+- [x] add a pretty, knitted R-markdown file and its .rmd
 - [ ] add equivalent code in Python
